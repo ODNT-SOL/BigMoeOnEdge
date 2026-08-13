@@ -408,7 +408,10 @@ std::unique_ptr<Session> Session::open(const SessionConfig & cfg,
     // Load with the layout the streamer requires: file-backed mmap, no repack (a repacked
     // q4_K buffer would break the rebind), experts on CPU.
     llama_model_params mparams = llama_model_default_params();
-    mparams.use_mmap = true;
+    // For GPU streaming the expert tensors must be in writable host memory so the streamer can
+    // copy active slices into them. use_mmap=false forces llama.cpp to allocate them privately
+    // (CPU backend) instead of mapping the file read-only. Dense layers are still offloaded to GPU.
+    mparams.use_mmap = !(cfg.n_gpu_layers > 0 && cfg.moe.enabled);
     mparams.use_extra_bufts = false;
     mparams.n_gpu_layers = (int32_t) cfg.n_gpu_layers;
 

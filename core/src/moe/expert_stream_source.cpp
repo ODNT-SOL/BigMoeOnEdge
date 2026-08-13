@@ -1,6 +1,7 @@
 #include "expert_stream_source.h"
 
 #include "ggml.h"
+#include "ggml-backend.h"
 #ifdef BMOE_HAVE_EXPERT_READY_HOOK
 #include "ggml-cpu.h" // ggml_cpu_set_expert_ready_hook (fork-only)
 #endif
@@ -1045,13 +1046,14 @@ bool ExpertStreamSource::load_layer(int il, const int32_t * ids, int n_ids) {
         for (const IoJob & j : jobs_) {
             if (j.proj < 0 || j.layer < 0 || j.layer >= n_layer_ || j.expert < 0 || j.expert >= n_expert_) continue;
             LayerExperts & L = layers_[j.layer];
-            void * orig = L.proj[j.proj].orig_data;
-            if (!orig) continue;
+            ggml_tensor * dst_tensor = L.proj[j.proj].tensor;
+            if (!dst_tensor) continue;
             const uint64_t slice = L.proj[j.proj].nb2;
             if (slice == 0) continue;
             const char * src = (const char *) j.dst;
-            char * dst = (char *) orig + (uint64_t) j.expert * slice;
-            std::memcpy(dst, src, (size_t) j.nbytes);
+            // The original tensor may live on a GPU backend; use ggml_backend_tensor_set so the
+            // data reaches the correct device/host backend buffer instead of raw memcpy on ->data.
+            ggml_backend_tensor_set(dst_tensor, src, (size_t) j.expert * slice, (size_t) j.nbytes);
         }
         mgmt_ns_.fetch_add((long long) std::chrono::duration_cast<std::chrono::nanoseconds>(clock_t_::now() - tc0).count());
     }

@@ -1,3 +1,4 @@
 [submodule "third_party/llama.cpp"]
 	path = third_party/llama.cpp
-	url = https://github.com/Helldez/llama.cpp.git
+	url = https://github.com/AdamGeorgesForges/llama.cpp.git
+	branch = bmoe/gpu-eval-host-copy
