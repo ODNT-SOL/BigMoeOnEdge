@@ -15,9 +15,11 @@ SessionConfig session_config_from(const RunConfig & cfg) {
     sc.n_ubatch = cfg.n_ubatch; // 0 = follow n_batch; smaller trades prefill speed for memory
     sc.chatml = cfg.chatml;
     sc.n_expert_used = cfg.n_expert_used; // active-expert (top-k) override; 0 = model default
+    sc.n_gpu_layers = cfg.n_gpu_layers;    // 0 = CPU-only, 999 = all layers on GPU
     sc.compute_trace_layers = cfg.compute_trace_layers;
     sc.sampling = cfg.sampling; // greedy by default; opt-in stochastic decoding
     sc.moe = cfg.moe;
+    sc.moe.gpu_host = cfg.n_gpu_layers > 0; // page-lock streamed buffers when the GPU is active
     sc.spec = cfg.spec; // self-speculation (MTP head or n-gram lookup); off by default
     return sc;
 }

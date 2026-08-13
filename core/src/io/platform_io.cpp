@@ -3,6 +3,10 @@
 // System headers MUST be included at global scope, never inside the namespace below:
 // <cstdlib> etc. do `using ::abs;` and would otherwise be pulled into bmoe::pio, where
 // ::abs is not visible (GCC hard-errors; MSVC happened to tolerate it).
+#if defined(BMOE_HAVE_CUDA)
+#include <cuda_runtime.h>
+#endif
+
 #if defined(_WIN32)
 #include <windows.h>
 #include <malloc.h>
@@ -86,6 +90,23 @@ void * alloc_aligned(size_t align, size_t sz) {
 }
 void aligned_free(void * p) {
     if (p) _aligned_free(p);
+}
+
+void * gpu_host_alloc(size_t align, size_t sz) {
+#if defined(BMOE_HAVE_CUDA)
+    (void) align;
+    void * p = nullptr;
+    if (cudaMallocHost(&p, sz) == cudaSuccess) return p;
+#endif
+    return alloc_aligned(align, sz);
+}
+
+void gpu_host_free(void * p, size_t /*sz*/) {
+    if (!p) return;
+#if defined(BMOE_HAVE_CUDA)
+    if (cudaFreeHost(p) == cudaSuccess) return;
+#endif
+    aligned_free(p);
 }
 
 size_t vm_page() {
@@ -188,6 +209,23 @@ void * alloc_aligned(size_t align, size_t sz) {
 }
 void aligned_free(void * p) {
     free(p);
+}
+
+void * gpu_host_alloc(size_t align, size_t sz) {
+#if defined(BMOE_HAVE_CUDA)
+    (void) align; // cudaMallocHost returns at least page-aligned memory
+    void * p = nullptr;
+    if (cudaMallocHost(&p, sz) == cudaSuccess) return p;
+#endif
+    return alloc_aligned(align, sz);
+}
+
+void gpu_host_free(void * p, size_t /*sz*/) {
+    if (!p) return;
+#if defined(BMOE_HAVE_CUDA)
+    if (cudaFreeHost(p) == cudaSuccess) return;
+#endif
+    aligned_free(p);
 }
 
 size_t vm_page() {

@@ -13,6 +13,10 @@
 
 #include "llama.h"
 #include "ggml.h"
+#ifdef BMOE_HAVE_CUDA
+#include "ggml-cuda.h"
+#include "ggml-backend.h"
+#endif
 
 // llama.cpp's `common` layer (NOT the stable public API): chat-template rendering and
 // reasoning parsing. See the note in the root CMakeLists / docs/seam.md.
@@ -406,7 +410,26 @@ std::unique_ptr<Session> Session::open(const SessionConfig & cfg,
     llama_model_params mparams = llama_model_default_params();
     mparams.use_mmap = true;
     mparams.use_extra_bufts = false;
-    mparams.n_gpu_layers = 0;
+    mparams.n_gpu_layers = (int32_t) cfg.n_gpu_layers;
+
+#ifdef BMOE_HAVE_CUDA
+    // When streaming experts while the dense backbone is on the GPU, keep the expert tensors in
+    // GPU-pinned host memory. llama.cpp then leaves tensor->data as a host pointer the GPU can
+    // DMA from, and BigMoeOnEdge can safely rebind that pointer to its own streamed slots.
+    llama_model_tensor_buft_override buft_overrides[5];
+    std::memset(buft_overrides, 0, sizeof(buft_overrides));
+    if (cfg.n_gpu_layers > 0 && cfg.moe.enabled) {
+        buft_overrides[0].pattern = ".*gate_exps.*";
+        buft_overrides[0].buft = ggml_backend_cuda_host_buffer_type();
+        buft_overrides[1].pattern = ".*up_exps.*";
+        buft_overrides[1].buft = ggml_backend_cuda_host_buffer_type();
+        buft_overrides[2].pattern = ".*down_exps.*";
+        buft_overrides[2].buft = ggml_backend_cuda_host_buffer_type();
+        buft_overrides[3].pattern = ".*gate_up_exps.*";
+        buft_overrides[3].buft = ggml_backend_cuda_host_buffer_type();
+        mparams.tensor_buft_overrides = buft_overrides;
+    }
+#endif
 
     // Optional active-expert override: reduce the model's top-k routing (e.g. 8 -> 6) to cut
     // per-token compute and — under streaming — flash I/O, at a quality cost. Applied purely

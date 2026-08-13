@@ -195,6 +195,7 @@ private:
     bool active_ = false;
     bool load_all_ = false;
     bool overlap_ = false;
+    bool gpu_host_ = false;                   // use page-locked host memory for streamed expert buffers
     bool two_wave_ = false;                  // publish the first projection's jobs before committing the rest (#118)
     bool prefetch_sync_ = false;             // test only: drain prefetch reads synchronously (serial mode)
     bool spec_adopt_ = false;                // route-ahead: staged layers adopt committed spec reads (see quiesce_spec)

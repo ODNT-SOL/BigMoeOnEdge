@@ -65,6 +65,11 @@ struct MoeStreamConfig {
     bool load_all = false;    // debug/A-B: load ALL experts each token (full-sweep baseline)
     bool force_cache = false; // allow a cache_mb in the pathological band (tests/experiments)
 
+    // Allocate streamed expert buffers from GPU-host memory (page-locked) so the GPU can
+    // access them directly. Only meaningful when a GPU backend is active and the model's
+    // dense weights are offloaded to it. This is the F2 lever.
+    bool gpu_host = false;
+
     // Overlap async expert reads with FFN compute instead of blocking on them: load_layer()
     // publishes the reads and returns immediately, and the CPU mul_mat_id kernel blocks per
     // expert (via the fork's expert-ready hook) only if that expert's slice is not yet in.
@@ -328,6 +333,12 @@ struct RunConfig {
     // changes the output. Applied at load via a llama.cpp kv_override on the arch-prefixed
     // expert_used_count metadata key; must stay in [1, n_expert]. Independent of streaming.
     int n_expert_used = 0;
+
+    // Number of layers to offload to GPU via llama.cpp (0 = CPU-only, 999 = all layers).
+    // Has no effect unless the llama.cpp build includes a GPU backend. On unified-memory
+    // devices the dense weights and attention can live on the GPU while the expert cache
+    // stays host/streamed; this is the lever F1 measures.
+    int n_gpu_layers = 0;
 
     // Compute-trace granularity. false (default): a barrier per graph node — exact per-op
     // attribution, but it serializes the graph against the expert stream and distorts the run.

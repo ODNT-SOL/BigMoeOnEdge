@@ -28,11 +28,13 @@ DenseWeights::byte_ranges(std::vector<std::pair<uint64_t, uint64_t>> expert_rang
 }
 
 bool DenseWeights::init(DenseWeightsMode mode,
+                        bool gpu_host,
                         const std::vector<std::string> & paths,
                         size_t align,
                         std::vector<std::vector<std::pair<uint64_t, uint64_t>>> ranges,
                         std::vector<DenseTensorRef> tensors) {
     mode_ = mode;
+    gpu_host_ = gpu_host;
     paths_ = paths;
     align_ = align ? align : 4096;
     ranges_ = std::move(ranges);
@@ -105,7 +107,7 @@ bool DenseWeights::read_anonymous(size_t align) {
             pinned_.push_back(pa); // tracked for shutdown even if a chunk read below fails
             buf = pa.base;
         } else {
-            buf = pio::alloc_aligned(align, (size_t) d.size);
+            buf = gpu_host_ ? pio::gpu_host_alloc(align, (size_t) d.size) : pio::alloc_aligned(align, (size_t) d.size);
             if (!buf) {
                 std::fprintf(stderr, "bmoe: dense buffer alloc %llu failed\n", (unsigned long long) d.size);
                 return false;
@@ -285,8 +287,12 @@ void DenseWeights::sample_mmap(size_t page) {
 }
 
 void DenseWeights::shutdown() {
-    for (void * b : bufs_)
-        if (b) pio::aligned_free(b);
+    for (void * b : bufs_) {
+        if (b) {
+            if (gpu_host_) pio::gpu_host_free(b, 0);
+            else pio::aligned_free(b);
+        }
+    }
     for (pio::PinnedAlloc & p : pinned_)
         pio::pinned_free(&p);
     bufs_.clear();

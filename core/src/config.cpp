@@ -39,6 +39,9 @@ ValidationResult validate(const RunConfig & cfg) {
     if (cfg.n_expert_used < 0) {
         return fail("n_expert_used must be >= 0 (0 = model default)");
     }
+    if (cfg.n_gpu_layers < 0) {
+        return fail("n_gpu_layers must be >= 0 (0 = CPU-only)");
+    }
 
     // Sampling ranges are enforced only when sampling is actually on (temp > 0). With temp <= 0
     // the engine takes the argmax path and the other knobs are inert, so a caller that leaves them

@@ -21,6 +21,14 @@ cmake_minimum_required(VERSION 3.21)
 # says which engine produced it. Keep it in step with CHANGELOG.md and the app's versionName.
 project(bigmoeonedge VERSION 0.19.0 LANGUAGES CXX)
 
+# If the bundled llama.cpp is being built with CUDA, the engine can use CUDA host memory for
+# streamed expert buffers so the GPU sees them without extra copies. Propagate that signal to core.
+set(BMOE_HAVE_CUDA OFF)
+if(DEFINED GGML_CUDA AND GGML_CUDA)
+    set(BMOE_HAVE_CUDA ON)
+    find_package(CUDAToolkit REQUIRED)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)

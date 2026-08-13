@@ -44,6 +44,8 @@ struct SessionConfig {
     // Active-expert (top-k) override applied at load via a kv_override on the arch-prefixed
     // expert_used_count key. 0 = use the model's own count. See RunConfig::n_expert_used.
     int n_expert_used = 0;
+    // Number of layers to offload to GPU. 0 = CPU-only, 999 = all. See RunConfig::n_gpu_layers.
+    int n_gpu_layers = 0;
     // Compute-trace granularity: false = a barrier per graph node, true = per layer boundary.
     // Only read when a compute-trace sink is attached. See RunConfig::compute_trace_layers.
     bool compute_trace_layers = false;

@@ -54,10 +54,14 @@ public:
     byte_ranges(std::vector<std::pair<uint64_t, uint64_t>> expert_ranges, uint64_t file_size);
 
     // Apply `mode` for the model files `paths` (per-shard dense `ranges` precomputed via byte_ranges;
-    // `tensors` needed only for Anonymous/Pinned). `align` is the O_DIRECT block size. Runs once at
-    // load, before the streamer's workers start (Anonymous rebinds tensor->data on the caller's
-    // thread). Returns false only on a hard Anonymous failure (alloc/read); Mmap and Warmed cannot fail.
+    // `tensors` needed only for Anonymous/Pinned). `align` is the O_DIRECT block size. `gpu_host`
+    // requests page-locked host memory for the anonymous buffers so the GPU can DMA them; only
+    // meaningful when a GPU backend is active and the caller wants to keep a CPU copy visible.
+    // Runs once at load, before the streamer's workers start (Anonymous rebinds tensor->data on the
+    // caller's thread). Returns false only on a hard Anonymous failure (alloc/read); Mmap and Warmed
+    // cannot fail.
     bool init(DenseWeightsMode mode,
+              bool gpu_host,
               const std::vector<std::string> & paths,
               size_t align,
               std::vector<std::vector<std::pair<uint64_t, uint64_t>>> ranges,
@@ -83,6 +87,7 @@ private:
     const char * addr_of(int file_idx, uint64_t off) const;
 
     DenseWeightsMode mode_ = DenseWeightsMode::Warmed;
+    bool gpu_host_ = false;
     std::vector<std::string> paths_;     // one per shard, in shard order
     std::vector<std::string> basenames_; // what /proc/self/maps entries are matched against
     size_t align_ = 4096;

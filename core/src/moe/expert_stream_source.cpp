@@ -44,6 +44,7 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
     n_layer_ = (int) layers_.size();
     load_all_ = cfg.load_all;
     overlap_ = cfg.overlap;
+    gpu_host_ = cfg.gpu_host;
     two_wave_ = cfg.io_two_wave;
     prefetch_sync_ = cfg.prefetch_sync && !cfg.overlap; // serial only: overlap lane 0 is a worker
     // Under route-ahead the speculated ids of a layer ARE the ids its topk will commit, so the
@@ -127,7 +128,7 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
         // slices are ever valid. Absent slots (max_full[p] == 0) get no buffer.
         for (int p = 0; p < MoeRecipe::max_exps; ++p) {
             if (max_full[p] == 0) continue;
-            slot_[p] = pio::alloc_aligned(align_, max_full[p]);
+            slot_[p] = gpu_host_ ? pio::gpu_host_alloc(align_, max_full[p]) : pio::alloc_aligned(align_, max_full[p]);
             if (!slot_[p]) {
                 std::fprintf(stderr, "bmoe: slot alloc %zu failed\n", max_full[p]);
                 return false;
@@ -246,7 +247,9 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
         std::vector<std::vector<std::pair<uint64_t, uint64_t>>> ranges(readers_.size());
         for (size_t s = 0; s < readers_.size(); ++s)
             ranges[s] = DenseWeights::byte_ranges(std::move(exp[s]), readers_[s]->file_size());
-        if (!dense_.init(cfg.dense_weights, shard_paths, align_, std::move(ranges), std::move(dense_tensors_))) {
+        const bool dense_gpu_host = gpu_host_ &&
+            (cfg.dense_weights == DenseWeightsMode::Anonymous || cfg.dense_weights == DenseWeightsMode::Pinned);
+        if (!dense_.init(cfg.dense_weights, dense_gpu_host, shard_paths, align_, std::move(ranges), std::move(dense_tensors_))) {
             std::fprintf(stderr, "bmoe: dense-weights init failed\n");
             return false;
         }
@@ -1396,7 +1399,8 @@ void ExpertStreamSource::shutdown() {
 
     for (int p = 0; p < MoeRecipe::max_exps; ++p)
         if (slot_[p]) {
-            pio::aligned_free(slot_[p]);
+            if (gpu_host_) pio::gpu_host_free(slot_[p], 0);
+            else pio::aligned_free(slot_[p]);
             slot_[p] = nullptr;
         }
     for (int p = 0; p < MoeRecipe::max_exps; ++p) {

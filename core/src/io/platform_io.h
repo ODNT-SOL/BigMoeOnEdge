@@ -42,6 +42,13 @@ uint64_t file_size(fd_t fd);
 void * alloc_aligned(size_t align, size_t sz);
 void aligned_free(void * p);
 
+// GPU-host memory: page-locked host memory accessible by the GPU. Only available when the
+// engine is built with CUDA (BMOE_HAVE_CUDA). Falls back to alloc_aligned if CUDA is not
+// available, so callers can unconditionally try it and only require the GPU path when it
+// succeeds.
+void * gpu_host_alloc(size_t align, size_t sz);
+void gpu_host_free(void * p, size_t sz);
+
 // A reclaim-exempt allocation: memory the kernel may not take back under pressure.
 //
 // On Android this is a dma-buf, obtained as an AHardwareBuffer of format BLOB and locked for CPU

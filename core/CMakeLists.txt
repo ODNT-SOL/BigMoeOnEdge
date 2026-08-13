@@ -43,6 +43,11 @@ if(BMOE_HAVE_LLAMA)
     find_package(Threads REQUIRED)
     target_link_libraries(bmoe_core PUBLIC Threads::Threads)
 
+    if(BMOE_HAVE_CUDA)
+        target_compile_definitions(bmoe_core PUBLIC BMOE_HAVE_CUDA=1)
+        target_link_libraries(bmoe_core PUBLIC CUDA::cudart)
+    endif()
+
     if(ANDROID)
         # libandroid carries AHardwareBuffer_*, the reclaim-exempt allocation behind
         # `--dense-weights ahwb` (pio::pinned_alloc). No other platform has an equivalent.

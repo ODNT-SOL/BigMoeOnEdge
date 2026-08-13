@@ -383,6 +383,8 @@ static void print_usage(const char * argv0) {
         "                          flash-bandwidth claim is checked against the reads that made it\n"
         "      --n-expert-used N   override active MoE experts per token (top-k); lower = faster\n"
         "                          but changes the output (quality). 0 = model default\n"
+        "      --ngl N               number of layers to offload to GPU (0 = CPU only, 999 = all).\n"
+        "                          Only matters when llama.cpp is built with a GPU backend.\n"
         "  -h, --help              show this text and exit\n"
         "      --version           print the engine version and exit\n"
         "\n"
@@ -566,6 +568,8 @@ int main(int argc, char ** argv) {
             cfg.n_ubatch = std::atoi(next("--ubatch"));
         else if (a == "--n-expert-used")
             cfg.n_expert_used = std::atoi(next("--n-expert-used"));
+        else if (a == "--ngl")
+            cfg.n_gpu_layers = std::atoi(next("--ngl"));
         else if (a == "--temp")
             cfg.sampling.temp = (float) std::atof(next("--temp"));
         else if (a == "--top-k")
@@ -700,6 +704,7 @@ int main(int argc, char ** argv) {
     if (!seen.count("--overlap")) cfg.moe.overlap = env_int("BMOE_OVERLAP", 0) != 0;
     if (!seen.count("--prefetch")) cfg.moe.prefetch_layers = env_int("BMOE_PREFETCH", 0);
     if (!seen.count("--n-expert-used")) cfg.n_expert_used = env_int("BMOE_N_EXPERT_USED", 0);
+    if (!seen.count("--ngl")) cfg.n_gpu_layers = env_int("BMOE_N_GPU_LAYERS", 0);
     if (!seen.count("--predict-log")) cfg.moe.predict_log = env_int("BMOE_PREDICT_LOG", 0) != 0;
     if (!seen.count("--predict-prefetch")) cfg.moe.predict_prefetch = env_int("BMOE_PREDICT_PREFETCH", 0) != 0;
 
