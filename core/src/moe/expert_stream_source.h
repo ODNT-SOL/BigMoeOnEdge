@@ -39,6 +39,7 @@ namespace bmoe {
 // One expert weight tensor to rebind, with where its data lives in the gguf.
 struct ExpertTensorRef {
     ggml_tensor * tensor = nullptr; // persistent weight tensor whose ->data we rebind
+    void * orig_data = nullptr;    // original tensor->data, kept when GPU streaming (no rebind)
     uint64_t file_off = 0;          // byte offset of the tensor's data within its shard
     uint64_t nb2 = 0;               // bytes per expert (== tensor->nb[2])
     int file_idx = 0;               // which shard file holds the bytes (0 for a single-file model)

@@ -43,8 +43,11 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
     layers_ = std::move(layers);
     n_layer_ = (int) layers_.size();
     load_all_ = cfg.load_all;
-    overlap_ = cfg.overlap;
+    overlap_ = cfg.overlap && !cfg.gpu_host; // GPU streaming uses backend buffers; copy path is serial-only for now
     gpu_host_ = cfg.gpu_host;
+    if (cfg.overlap && cfg.gpu_host) {
+        std::fprintf(stderr, "bmoe: --overlap disabled with GPU streaming (backend-buffer copy is serial-only)\n");
+    }
     two_wave_ = cfg.io_two_wave;
     prefetch_sync_ = cfg.prefetch_sync && !cfg.overlap; // serial only: overlap lane 0 is a worker
     // Under route-ahead the speculated ids of a layer ARE the ids its topk will commit, so the
@@ -123,9 +126,8 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
     }
 
     if (cache_max_ == 0) {
-        // One shared slot per present projection, reused across layers (one layer computes
-        // at a time). Rebind every bound layer's expert tensors onto them; only routed
-        // slices are ever valid. Absent slots (max_full[p] == 0) get no buffer.
+        // Cache off: one shared full-size slot per projection, reused by layers. Under GPU streaming
+        // we keep the original tensor->data (the backend buffer) and copy streamed slices into it.
         for (int p = 0; p < MoeRecipe::max_exps; ++p) {
             if (max_full[p] == 0) continue;
             slot_[p] = gpu_host_ ? pio::gpu_host_alloc(align_, max_full[p]) : pio::alloc_aligned(align_, max_full[p]);
@@ -136,8 +138,14 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
         }
         for (LayerExperts & L : layers_) {
             if (!L.bound) continue;
-            for (int p = 0; p < MoeRecipe::max_exps; ++p)
-                if (L.proj[p].tensor) L.proj[p].tensor->data = slot_[p];
+            for (int p = 0; p < MoeRecipe::max_exps; ++p) {
+                if (!L.proj[p].tensor) continue;
+                if (gpu_host_) {
+                    L.proj[p].orig_data = L.proj[p].tensor->data;
+                } else {
+                    L.proj[p].tensor->data = slot_[p];
+                }
+            }
         }
     } else {
         // LRU cache: one reserved (address-only) buffer per (layer, projection). Physical
@@ -155,13 +163,18 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
             for (int p = 0; p < MoeRecipe::max_exps; ++p) {
                 if (!L.proj[p].tensor) continue; // absent slot in a fused layout
                 const size_t full = (size_t) L.proj[p].nb2 * (size_t) n_expert_;
-                lbuf_[p][il] = pio::vm_reserve(full);
+                lbuf_[p][il] = gpu_host_ ? pio::gpu_host_alloc(align_, full) : pio::vm_reserve(full);
                 if (!lbuf_[p][il]) {
-                    std::fprintf(stderr, "bmoe: vm_reserve %zu failed (layer %d)\n", full, il);
+                    std::fprintf(stderr, "bmoe: %s %zu failed (layer %d)\n",
+                                 gpu_host_ ? "gpu_host_alloc" : "vm_reserve", full, il);
                     return false;
                 }
                 lbuf_sz_[p][il] = full;
-                L.proj[p].tensor->data = lbuf_[p][il];
+                if (gpu_host_) {
+                    L.proj[p].orig_data = L.proj[p].tensor->data;
+                } else {
+                    L.proj[p].tensor->data = lbuf_[p][il];
+                }
             }
         }
         const size_t n_entry = (size_t) n_layer_ * n_expert_;
@@ -1024,6 +1037,24 @@ bool ExpertStreamSource::load_layer(int il, const int32_t * ids, int n_ids) {
         if (io_err_.load()) return false;
     }
     read_ns_.fetch_add((long long) std::chrono::duration_cast<std::chrono::nanoseconds>(clock_t_::now() - t0).count());
+
+    // GPU streaming: the reads landed in our staging slots/lbufs, but the backend buffer the GPU
+    // sees is still the original tensor->data. Copy the active slices there before compute runs.
+    if (gpu_host_) {
+        const auto tc0 = clock_t_::now();
+        for (const IoJob & j : jobs_) {
+            if (j.proj < 0 || j.layer < 0 || j.layer >= n_layer_ || j.expert < 0 || j.expert >= n_expert_) continue;
+            LayerExperts & L = layers_[j.layer];
+            void * orig = L.proj[j.proj].orig_data;
+            if (!orig) continue;
+            const uint64_t slice = L.proj[j.proj].nb2;
+            if (slice == 0) continue;
+            const char * src = (const char *) j.dst;
+            char * dst = (char *) orig + (uint64_t) j.expert * slice;
+            std::memcpy(dst, src, (size_t) j.nbytes);
+        }
+        mgmt_ns_.fetch_add((long long) std::chrono::duration_cast<std::chrono::nanoseconds>(clock_t_::now() - tc0).count());
+    }
 
     if (cache_max_) {
         const auto te0 = clock_t_::now();
