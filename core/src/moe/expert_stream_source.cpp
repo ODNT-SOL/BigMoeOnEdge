@@ -44,10 +44,13 @@ bool ExpertStreamSource::init(const std::vector<std::string> & shard_paths,
     layers_ = std::move(layers);
     n_layer_ = (int) layers_.size();
     load_all_ = cfg.load_all;
-    overlap_ = cfg.overlap && !cfg.gpu_host; // GPU streaming uses backend buffers; copy path is serial-only for now
+    overlap_ = cfg.overlap && !cfg.gpu_host && cache_max_ > 0; // GPU streaming uses backend buffers; cache-off shared slots cannot absorb aligned I/O overruns
     gpu_host_ = cfg.gpu_host;
     if (cfg.overlap && cfg.gpu_host) {
         std::fprintf(stderr, "bmoe: --overlap disabled with GPU streaming (backend-buffer copy is serial-only)\n");
+    }
+    if (cfg.overlap && !cfg.gpu_host && cache_max_ == 0) {
+        std::fprintf(stderr, "bmoe: --overlap disabled with cache off (shared slots need LRU buffers)\n");
     }
     two_wave_ = cfg.io_two_wave;
     prefetch_sync_ = cfg.prefetch_sync && !cfg.overlap; // serial only: overlap lane 0 is a worker

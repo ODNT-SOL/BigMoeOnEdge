@@ -57,7 +57,10 @@ if(PYTHON3)
         set_tests_properties(moe_make_tiny_model_${spec} PROPERTIES FIXTURES_SETUP ${_fixture})
 
         add_test(NAME moe_gates_${spec} COMMAND bmoe_moe_gates ${_model})
-        set_tests_properties(moe_gates_${spec} PROPERTIES FIXTURES_REQUIRED ${_fixture})
+        set_tests_properties(moe_gates_${spec} PROPERTIES
+            FIXTURES_REQUIRED ${_fixture}
+            RESOURCE_LOCK bmoe_moe_gates_hook
+        )
     endforeach()
 
     # The same qwen3moe fixture, written as a 4-shard split gguf (metadata-only first shard —
@@ -74,7 +77,10 @@ if(PYTHON3)
 
     add_test(NAME moe_gates_split
              COMMAND bmoe_moe_gates "${CMAKE_CURRENT_BINARY_DIR}/tiny-moe-split-00001-of-00004.gguf")
-    set_tests_properties(moe_gates_split PROPERTIES FIXTURES_REQUIRED TINY_MOE_MODEL_split)
+    set_tests_properties(moe_gates_split PROPERTIES
+        FIXTURES_REQUIRED TINY_MOE_MODEL_split
+        RESOURCE_LOCK bmoe_moe_gates_hook
+    )
 else()
     message(WARNING "python3 not found: MoE gates will not run (models cannot be generated)")
 endif()
