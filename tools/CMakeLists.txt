@@ -18,6 +18,15 @@ target_link_libraries(bmoe-iobench PRIVATE Threads::Threads)
 add_executable(bmoe-membench membench.cpp)
 target_compile_features(bmoe-membench PRIVATE cxx_std_17)
 target_link_libraries(bmoe-membench PRIVATE Threads::Threads)
+# F3 prototype: remote expert-cache TCP transport (Phase 3a). Pure sockets, no engine deps.
+add_executable(bmoe-remote-cache-server remote_cache_server.cpp)
+target_compile_features(bmoe-remote-cache-server PRIVATE cxx_std_17)
+target_link_libraries(bmoe-remote-cache-server PRIVATE Threads::Threads)
+
+add_executable(bmoe-remote-cache-client remote_cache_client.cpp)
+target_compile_features(bmoe-remote-cache-client PRIVATE cxx_std_17)
+target_link_libraries(bmoe-remote-cache-client PRIVATE Threads::Threads)
+
 if(ANDROID)
     # AHardwareBuffer_* live in libandroid.so.
     target_link_libraries(bmoe-membench PRIVATE android)
